@@ -1,14 +1,14 @@
 import streamlit as st
-import requests
 import pandas as pd
 import matplotlib.pyplot as plt
 from sklearn.linear_model import LinearRegression
 import numpy as np
+import os
 
 st.set_page_config(page_title="Predição de Criptomoedas", layout="centered")
 
 st.title("🔮 Predição de Preços de Criptomoedas")
-st.markdown("Este painel utiliza regressão linear simples para prever os preços médios mensais das criptomoedas nos próximos 3 meses, com dados atualizados da API da Binance.")
+st.markdown("Este painel utiliza regressão linear simples para prever os preços médios mensais das criptomoedas nos próximos 3 meses, com base em dados salvos localmente.")
 
 # ----------------------------
 # Seleção de moeda
@@ -20,67 +20,58 @@ symbol_map = {
     "solana": "SOLUSDT"
 }
 symbol = symbol_map[coin]
+csv_file = "dados_binance.csv"
 
 # ----------------------------
-# Requisição à API Binance
+# Verificação do arquivo
 # ----------------------------
-url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=1000"
-params = {
-    "symbol": symbol,
-    "interval": "1d",
-    "limit": 90  # últimos 90 dias
-}
 
-response = requests.get(url, params=params)
-data = response.json()
+if not os.path.exists(csv_file):
+    st.error(f"Arquivo de dados '{csv_file}' não encontrado. Execute o script 'dados_binance.py' para gerar os dados.")
+    st.stop()
 
-if not isinstance(data, list):
-    st.error("Erro ao carregar dados da Binance.")
-else:
-    # ----------------------------
-    # Tratamento dos dados
-    # ----------------------------
-    df = pd.DataFrame(data, columns=[
-        "open_time", "open", "high", "low", "close", "volume",
-        "close_time", "quote_asset_volume", "number_of_trades",
-        "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
-    ])
 
-    df["data"] = pd.to_datetime(df["open_time"], unit="ms")
-    df["preco"] = df["close"].astype(float)
-    df["volume"] = df["volume"].astype(float)
+# ----------------------------
+# Carregamento e filtragem
+# ----------------------------
+df = pd.read_csv(csv_file)
+df["data"] = pd.to_datetime(df["data"])
+df = df[df["symbol"] == symbol]
 
-    df["ano_mes"] = df["data"].dt.to_period("M")
-    media_mensal = df.groupby("ano_mes")[["preco", "volume"]].mean()
+if df.empty:
+    st.error(f"Não há dados disponíveis para {coin}.")
+    st.stop()
 
-    # ----------------------------
-    # Modelo preditivo
-    # ----------------------------
-    media_mensal.reset_index(inplace=True)
-    media_mensal["timestamp"] = media_mensal["ano_mes"].dt.to_timestamp().astype(np.int64) // 10**9
-    X = media_mensal[["timestamp"]]
-    y = media_mensal["preco"]
+df["ano_mes"] = df["data"].dt.to_period("M")
+media_mensal = df.groupby("ano_mes")[["preco", "volume"]].mean().reset_index()
 
-    modelo = LinearRegression()
-    modelo.fit(X, y)
+# ----------------------------
+# Modelo preditivo
+# ----------------------------
+media_mensal["timestamp"] = media_mensal["ano_mes"].dt.to_timestamp().astype(np.int64) // 10**9
+X = media_mensal[["timestamp"]]
+y = media_mensal["preco"]
 
-    # Prever próximos 3 meses
-    futuro = pd.date_range(media_mensal["ano_mes"].max().to_timestamp() + pd.offsets.MonthBegin(),
-                           periods=3, freq="MS")
-    futuro_ts = np.array(futuro.astype(np.int64) // 10**9).reshape(-1, 1)
-    previsoes = modelo.predict(futuro_ts)
+modelo = LinearRegression()
+modelo.fit(X, y)
 
-    # ----------------------------
-    # Gráfico
-    # ----------------------------
-    fig, ax = plt.subplots(figsize=(8, 5))
-    ax.plot(media_mensal["ano_mes"].dt.to_timestamp(), media_mensal["preco"], label="Histórico", marker="o")
-    ax.plot(futuro, previsoes, label="Previsão", linestyle="--", color="red")
-    ax.set_title(f"{coin.capitalize()} - Preço médio + Previsão")
-    ax.set_xlabel("Mês")
-    ax.set_ylabel("Preço médio (USD)")
-    ax.grid(True)
-    ax.legend()
-    plt.xticks(rotation=45)
+# Prever próximos 3 meses
+futuro = pd.date_range(media_mensal["ano_mes"].max().to_timestamp() + pd.offsets.MonthBegin(),
+                       periods=3, freq="MS")
+futuro_ts = np.array(futuro.astype(np.int64) // 10**9).reshape(-1, 1)
+previsoes = modelo.predict(futuro_ts)
 
-    st.pyplot(fig)
+# ----------------------------
+# Gráfico
+# ----------------------------
+fig, ax = plt.subplots(figsize=(8, 5))
+ax.plot(media_mensal["ano_mes"].dt.to_timestamp(), media_mensal["preco"], label="Histórico", marker="o")
+ax.plot(futuro, previsoes, label="Previsão", linestyle="--", color="red")
+ax.set_title(f"{coin.capitalize()} - Preço médio + Previsão")
+ax.set_xlabel("Mês")
+ax.set_ylabel("Preço médio (USD)")
+ax.grid(True)
+ax.legend()
+plt.xticks(rotation=45)
+
+st.pyplot(fig)
