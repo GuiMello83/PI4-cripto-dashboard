@@ -22,18 +22,19 @@ symbol = symbol_map[coin]
 # ----------------------------
 # Requisição à API Binance
 # ----------------------------
-url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=1000"
+url = "https://api.binance.com/api/v3/klines"
 params = {
     "symbol": symbol,
     "interval": "1d",
-    "limit": 90  # últimos 90 dias
+    "limit": 90
 }
 
 response = requests.get(url, params=params)
 data = response.json()
 
-if not isinstance(data, list):
-    st.error("Erro ao carregar dados da Binance.")
+if response.status_code != 200:
+    st.error(f"Erro ao carregar dados da Binance: {response.status_code}")
+    st.stop()
 else:
     # ----------------------------
     # Tratamento dos dados
