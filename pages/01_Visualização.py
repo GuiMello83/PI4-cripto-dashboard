@@ -22,7 +22,7 @@ symbol = symbol_map[coin]
 # ----------------------------
 # Requisição à API Binance
 # ----------------------------
-url = "https://api.binance.com/api/v3/klines"
+url = f"https://api.binance.com/api/v3/klines?symbol={symbol}&interval=1d&limit=1000"
 params = {
     "symbol": symbol,
     "interval": "1d",
