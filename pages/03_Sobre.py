@@ -8,7 +8,7 @@ st.markdown("""
 Este projeto foi desenvolvido como parte de um projeto integrador com o objetivo de facilitar a tomada de decisão de investidores iniciantes em criptomoedas.
 
 ### 🎯 Objetivos
-- Utilizar dados históricos da CoinGecko
+- Utilizar dados históricos da Binance API (tempo real)
 - Aplicar estatística preditiva e aprendizado de máquina
 - Criar uma interface visual interativa com Streamlit
 

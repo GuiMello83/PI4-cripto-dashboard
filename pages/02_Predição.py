@@ -2,51 +2,56 @@ import streamlit as st
 import requests
 import pandas as pd
 import matplotlib.pyplot as plt
-from datetime import datetime
 from sklearn.linear_model import LinearRegression
 import numpy as np
 
 st.set_page_config(page_title="Predição de Criptomoedas", layout="centered")
 
 st.title("🔮 Predição de Preços de Criptomoedas")
-st.markdown("Este painel utiliza regressão linear simples para prever os preços médios mensais das criptomoedas nos próximos 3 meses.")
+st.markdown("Este painel utiliza regressão linear simples para prever os preços médios mensais das criptomoedas nos próximos 3 meses, com dados atualizados da API da Binance.")
 
 # ----------------------------
 # Seleção de moeda
 # ----------------------------
 coin = st.selectbox("Escolha a moeda para prever:", ["bitcoin", "ethereum", "solana"])
-start_date = int(datetime(2024, 12, 1).timestamp())
-end_date = int(datetime(2025, 2, 28).timestamp())
+symbol_map = {
+    "bitcoin": "BTCUSDT",
+    "ethereum": "ETHUSDT",
+    "solana": "SOLUSDT"
+}
+symbol = symbol_map[coin]
 
 # ----------------------------
-# Requisição à API
+# Requisição à API Binance
 # ----------------------------
-url = f"https://api.coingecko.com/api/v3/coins/{coin}/market_chart/range"
+url = "https://api.binance.com/api/v3/klines"
 params = {
-    "vs_currency": "usd",
-    "from": start_date,
-    "to": end_date
+    "symbol": symbol,
+    "interval": "1d",
+    "limit": 90  # últimos 90 dias
 }
 
 response = requests.get(url, params=params)
 data = response.json()
 
-if "prices" not in data:
-    st.error("Erro ao carregar dados da API.")
+if not isinstance(data, list):
+    st.error("Erro ao carregar dados da Binance.")
 else:
     # ----------------------------
-    # Preparar dados
+    # Tratamento dos dados
     # ----------------------------
-    df_precos = pd.DataFrame(data["prices"], columns=["timestamp_ms", "preco"])
-    df_mercado = pd.DataFrame(data["market_caps"], columns=["timestamp_ms", "capitalizacao_mercado"])
-    df_volume = pd.DataFrame(data["total_volumes"], columns=["timestamp_ms", "volume"])
+    df = pd.DataFrame(data, columns=[
+        "open_time", "open", "high", "low", "close", "volume",
+        "close_time", "quote_asset_volume", "number_of_trades",
+        "taker_buy_base_volume", "taker_buy_quote_volume", "ignore"
+    ])
 
-    df = df_precos.merge(df_mercado, on="timestamp_ms").merge(df_volume, on="timestamp_ms")
-    df["data"] = pd.to_datetime(df["timestamp_ms"], unit="ms")
-    df = df[["data", "preco", "capitalizacao_mercado", "volume"]]
+    df["data"] = pd.to_datetime(df["open_time"], unit="ms")
+    df["preco"] = df["close"].astype(float)
+    df["volume"] = df["volume"].astype(float)
 
     df["ano_mes"] = df["data"].dt.to_period("M")
-    media_mensal = df.groupby("ano_mes")[["preco", "capitalizacao_mercado", "volume"]].mean()
+    media_mensal = df.groupby("ano_mes")[["preco", "volume"]].mean()
 
     # ----------------------------
     # Modelo preditivo
@@ -60,7 +65,8 @@ else:
     modelo.fit(X, y)
 
     # Prever próximos 3 meses
-    futuro = pd.date_range("2025-03-01", "2025-05-01", freq="MS")
+    futuro = pd.date_range(media_mensal["ano_mes"].max().to_timestamp() + pd.offsets.MonthBegin(),
+                           periods=3, freq="MS")
     futuro_ts = np.array(futuro.astype(np.int64) // 10**9).reshape(-1, 1)
     previsoes = modelo.predict(futuro_ts)
 
